@@ -1,8 +1,7 @@
-#### add() - добавила параметр userId
 #### createComment() - не использовала параметры ownerId и guid
 #### deleteComment() - не использовала параметр ownerId
 #### editComment() - не использовала параметр ownerId
-#### get() - не использовала параметр noteIds
+#### get() - не использовала параметр userId
 #### getById() - не использовала параметры ownerId и needWiki
 #### getComments() - не использовала параметр ownerId
 #### restoreComment() - не использовала параметр ownerId
