@@ -12,8 +12,8 @@ open class Note(
     var privacyComment: String = "",
     val noteId: Int = 0,
     var isDeleted: Boolean = false,
-    var userId: Int = 0,
-    val date: Long = System.currentTimeMillis()
+    val date: Long = System.currentTimeMillis(),
+    val comments: MutableList<NoteComment> = mutableListOf()
 ) {
     init {
         when (privacy) {

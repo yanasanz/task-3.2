@@ -1,111 +1,92 @@
 import exceptions.CommentAccessDeniedException
+import exceptions.CommentNotFoundException
 import exceptions.NoteAccessDeniedException
 import exceptions.NoteNotFoundException
-import notes.ItemAndList
 import notes.Note
 import notes.NoteComment
-import notes.User
 import java.text.DateFormat
 
 class NoteService {
-    var users = listOf<ItemAndList<User, List<ItemAndList<Note, List<NoteComment>>>>>()
-    var noteIds = mutableListOf<Int>()
-    var commentIds = mutableListOf<Int>()
+    val notes: MutableList<Note> = mutableListOf()
+    private val commentIds: MutableList<Int> = mutableListOf()
 
-    fun add(title: String, text: String, privacy: Int, commentPrivacy: Int, userId: Int): Int {
+    fun add(title: String, text: String, privacy: Int, commentPrivacy: Int): Int {
         val note =
-            Note(title, text, privacy, commentPrivacy, noteId = noteIds.size + 1, userId = userId)
-        noteIds.add(note.noteId)
-        val noteWithComments: ItemAndList<Note, List<NoteComment>> = ItemAndList(note, listOf())
-        val currentUser = User(userId)
-        val userWithNotes: ItemAndList<User, List<ItemAndList<Note, List<NoteComment>>>> =
-            ItemAndList(currentUser, listOf())
-        if (users.isEmpty()) {
-            users = users + userWithNotes
-        }
-        for (user in users){
-            when {
-                user.main.userId != userId -> {
-                    users = users + userWithNotes
-                    user.list += noteWithComments
-                    break
-                }
-                user.main.userId.equals(userId) -> user.list += noteWithComments
+            Note(title, text, privacy, commentPrivacy, noteId = notes.size + 1)
+        when {
+            !(privacy in 0..4) -> {
+                println("Privacy should be from 0 to 1")
+                return -1
             }
+            !(commentPrivacy in 0..4) -> {
+                println("Comment privacy should be from 0 to 1")
+                return -2
+            }
+            else -> notes.add(note)
         }
         return note.noteId
     }
 
-
     fun createComment(noteId: Int, replyTo: Int?, message: String): Int {
-        var commentId: Int = 0
-        for (user in users) {
-            for (note in user.list) {
-                if (note.main.noteId == noteId) {
-                    if (note.main.privacy == 0 && note.main.commentPrivacy == 0) {
-                        val comment = NoteComment(noteId = note.main.noteId,
-                            replyTo = replyTo,
-                            message = message,
-                            commentId = if (commentIds.isEmpty()) 1 else commentIds.last() + 1)
-                        note.list += comment
-                        commentIds.add(comment.commentId)
-                        commentId = comment.commentId
-                    } else {
-                        println("This note has invalid privacy parameters")
-                    }
-                } else {
-                    println("There is no such note")
-                }
+        if (!(noteId in 1..notes.size)) throw NoteNotFoundException("180 Note not found")
+        var commentId = 0
+        for (note in notes) {
+            if (note.noteId == noteId) {
+                val comment = NoteComment(noteId = note.noteId,
+                    replyTo = replyTo,
+                    message = message,
+                    commentId = if (commentIds.isEmpty()) 1 else commentIds.last() + 1)
+                note.comments.add(comment)
+                commentIds.add(comment.commentId)
+                commentId = comment.commentId
             }
         }
         return commentId
     }
 
-
     fun delete(noteId: Int): Int {
-        if (!(noteId in 1..noteIds.size)) throw NoteNotFoundException("180 notes.Note not found")
-        for (user in users) {
-            for (note in user.list) {
-                when {
-                    note.main.noteId == noteId && !note.main.isDeleted -> note.main.isDeleted = true
-                    note.main.noteId == noteId && note.main.isDeleted -> throw NoteNotFoundException("180 notes.Note not found")
+        if (!(noteId in 1..notes.size)) throw NoteNotFoundException("180 Note not found")
+        for (note in notes) {
+            when {
+                note.noteId == noteId && !note.isDeleted -> note.isDeleted = true
+                note.noteId == noteId && note.isDeleted -> throw NoteNotFoundException("180 Note not found")
+            }
+            for (comment in note.comments) {
+                if (note.isDeleted) {
+                    comment.isDeleted = true
                 }
             }
+
         }
         return 1
     }
 
     fun deleteComment(commentId: Int): Int {
-        if (!(commentId in 1..commentIds.size)) println("There is no such comment")
-        for (user in users) {
-            for (note in user.list) {
-                for (comment in note.list) {
-                    if (comment.commentId == commentId && !comment.isDeleted) {
-                        when {
-                            note.main.privacy in 1..3 -> throw NoteAccessDeniedException("181 Access to note denied")
-                            note.main.commentPrivacy in 1..3 -> throw CommentAccessDeniedException("183 Access to comment denied")
-                            note.main.privacy == 0 && note.main.commentPrivacy == 0 -> comment.isDeleted =
-                                true
-                        }
+        if (!(commentId in 1..commentIds.size)) throw CommentNotFoundException("184 Comment not found")
+        for (note in notes) {
+            for (comment in note.comments) {
+                if (comment.commentId == commentId && !comment.isDeleted) {
+                    when {
+                        note.privacy in 1..3 -> throw NoteAccessDeniedException("181 Access to note denied")
+                        note.commentPrivacy in 1..3 -> throw CommentAccessDeniedException("183 Access to comment denied")
+                        note.privacy == 0 && note.commentPrivacy == 0 -> comment.isDeleted = true
                     }
-
                 }
             }
         }
         return 1
     }
 
-    fun edit(
-        noteId: Int, title: String, text: String, privacy: Int, commentPrivacy: Int,
-    ): Int {
-        if (!(noteId in 1..noteIds.size)) throw NoteNotFoundException("180 notes.Note not found")
-        for (user in users) {
-            for (note in user.list) {
-                if (note.main.noteId == noteId && !note.main.isDeleted) {
-                    note.main.title = title
-                    note.main.text = text
-                    note.main.privacy = privacy
-                    note.main.commentPrivacy = commentPrivacy
+    fun edit(noteId: Int, title: String, text: String, privacy: Int, commentPrivacy: Int): Int {
+        if (!(noteId in 1..notes.size)) throw NoteNotFoundException("180 Note not found")
+        for (note in notes) {
+            when {
+                privacy in 1..3 -> throw NoteAccessDeniedException("181 Access to note denied")
+                note.noteId == noteId && !note.isDeleted -> {
+                    note.title = title
+                    note.text = text
+                    note.privacy = privacy
+                    note.commentPrivacy = commentPrivacy
                 }
             }
         }
@@ -113,98 +94,81 @@ class NoteService {
     }
 
     fun editComment(commentId: Int, message: String): Int {
-        if (!(commentId in 1..commentIds.size)) println("There is no such comment")
-        for (user in users) {
-            for (note in user.list) {
-                for (comment in note.list) {
-                    if (comment.commentId == commentId && !comment.isDeleted) {
-                        when {
-                            note.main.commentPrivacy in 1..3 -> throw CommentAccessDeniedException("183 Access to comment denied")
-                            note.main.commentPrivacy == 0 -> comment.message = message
-                        }
+        if (!(commentId in 1..commentIds.size)) throw CommentNotFoundException("184 Comment not found")
+        for (note in notes) {
+            for (comment in note.comments) {
+                if (comment.commentId == commentId && !comment.isDeleted) {
+                    when {
+                        note.commentPrivacy in 1..3 -> throw CommentAccessDeniedException("183 Access to comment denied")
+                        note.commentPrivacy == 0 -> comment.message = message
                     }
-
                 }
             }
         }
         return 1
     }
 
-    fun get(userId: Int, offset: Int, count: Int, sort: Int): List<Note> {
-        var notes: List<Note> = listOf()
-        for (user in users) {
-            if (user.main.userId == userId) {
-                for (note in user.list) {
-                    notes = notes + note.main
-                }
+    fun get(noteIds: String, offset: Int, count: Int, sort: Int): List<Note> {
+        val input = noteIds.split(" ").toTypedArray()
+        val ids = input.map { it.toInt() }
+        var notesList: List<Note> = listOf()
+        for (id in ids) {
+            if (id in 1..notes.size) {
+                notesList = notesList + notes[id - 1]
             } else {
-                println("notes.User not found")
+                throw NoteNotFoundException("180 Note with ID $id is not found")
             }
         }
-        notes = notes.subList(offset, offset + count)
+        val selectedNotesList = notesList.subList(offset, offset + count)
+        var sortedList: List<Note> = listOf()
         when (sort) {
-            0 -> notes.sortedBy { it.date }
-            1 -> notes.sortedByDescending { it.date }
+            1 -> sortedList = selectedNotesList.sortedWith(compareBy { it.date })
+            0 -> sortedList = selectedNotesList.sortedWith(compareBy { it.date }).reversed()
             else -> println("Please enter sort type as 0 or 1")
         }
-        return notes
+        return sortedList
     }
 
-    fun getById(noteId: Int): Unit {
-        if (!(noteId in 1..noteIds.size)) throw NoteNotFoundException("180 notes.Note not found")
-        for (user in users) {
-            for (note in user.list) {
-                when {
-                    note.main.noteId == noteId && !note.main.isDeleted -> {
-                        println("Заметка №${note.main.noteId} \n" +
-                                "Название: ${note.main.title} \n" +
-                                "Текст: ${note.main.text} \n" +
-                                "Уровень доступа к заметке: ${note.main.privacy} - ${note.main.privacyView} \n" +
-                                "Уровень доступа к комментированию заметки: ${note.main.commentPrivacy} - ${note.main.privacyComment} \n" +
-                                "Пользователь: ${note.main.userId} \n" +
-                                "Дата создания: ${DateFormat.getInstance().format(note.main.date)}")
-                    }
-                    note.main.noteId == noteId && note.main.isDeleted -> throw NoteNotFoundException("180 notes.Note not found")
-                }
-            }
+    fun getById(noteId: Int): Note {
+        if (!(noteId in 1..notes.size)) throw NoteNotFoundException("180 Note not found")
+        val note: Note = notes[noteId - 1]
+        if (!note.isDeleted) {
+            println("Заметка №${note.noteId} \n" +
+                    "Название: ${note.title} \n" +
+                    "Текст: ${note.text} \n" +
+                    "Уровень доступа к заметке: ${note.privacy} - ${note.privacyView} \n" +
+                    "Уровень доступа к комментированию заметки: ${note.commentPrivacy} - ${note.privacyComment} \n" +
+                    "Дата создания: ${DateFormat.getInstance().format(note.date)}")
+        } else {
+            throw NoteNotFoundException("180 Note not found")
         }
+        return note
     }
 
     fun getComments(noteId: Int, offset: Int, count: Int, sort: Int): List<NoteComment> {
+        if (!(noteId in 1..notes.size)) throw NoteNotFoundException("180 Note not found")
         var noteComments: List<NoteComment> = listOf()
-        for (user in users) {
-            for (note in user.list) {
-                if (note.main.noteId == noteId) {
-                    for (comment in note.list) {
-                        noteComments = noteComments + comment
-                    }
-                } else {
-                    println("notes.Note not found")
-                }
+        for (note in notes) {
+            if (note.noteId == noteId) {
+                noteComments = note.comments
             }
         }
-        noteComments = noteComments.slice(offset..offset + count)
+        val selectedCommentsList = noteComments.subList(offset, offset + count)
+        var sortedCommentsList: List<NoteComment> = listOf()
         when (sort) {
-            0 -> noteComments.sortedBy { it.date }
-            1 -> noteComments.sortedByDescending { it.date }
+            1 -> sortedCommentsList = selectedCommentsList.sortedWith(compareBy { it.date })
+            0 -> sortedCommentsList = selectedCommentsList.sortedWith(compareBy { it.date }).reversed()
             else -> println("Please enter sort type as 0 or 1")
         }
-        return noteComments
+        return sortedCommentsList
     }
 
     fun restoreComment(commentId: Int): Int {
-        if (!(commentId in 1..commentIds.size)) println("There is no such comment")
-        for (user in users) {
-            for (note in user.list) {
-                for (comment in note.list) {
-                    if (comment.commentId == commentId && comment.isDeleted) {
-                        when {
-                            note.main.commentPrivacy in 1..3 -> throw CommentAccessDeniedException("183 Access to comment denied")
-                            note.main.privacy == 0 && note.main.commentPrivacy == 0 -> comment.isDeleted =
-                                false
-                        }
-                    }
-
+        if (!(commentId in 1..commentIds.size)) throw CommentNotFoundException("184 Comment not found")
+        for (note in notes) {
+            for (comment in note.comments) {
+                if (comment.commentId == commentId && comment.isDeleted) {
+                       comment.isDeleted = false
                 }
             }
         }
